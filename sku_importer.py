@@ -123,13 +123,14 @@ for variant in to_update:
 
 for product in to_create:
 	print "New product " + product.sku + " - " + (product.name or "")
-	api_request("/products/", verb="POST", data={
-		"name": product.name,
-		"variants": [{
-			"sku": product.sku,
-			"stock": product.stock,
-			"price": product.price
-		}]
-	})
+	if args.create:
+		api_request("/products/", verb="POST", data={
+			"name": product.name,
+			"variants": [{
+				"sku": product.sku,
+				"stock": product.stock,
+				"price": product.price
+			}]
+		})
 
 
