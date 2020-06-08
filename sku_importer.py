@@ -1,4 +1,5 @@
 from collections import namedtuple
+from collections import defaultdict
 from decimal import Decimal
 
 import argparse
@@ -68,6 +69,10 @@ parser.add_argument("--export", help="Exports all existing products to exportfil
 parser.add_argument("--exportfile", help="Path to the file to export to", default="export.json")
 parser.add_argument("--readexport", help="Checks current prices and stocks against the exportfile instead of calling the API", action="store_true")
 
+# General options
+parser.add_argument("--dry", help="Only notifies about actions to be taken, it doesn't call the API for updating data if needed", action="store_true")
+
+
 args = parser.parse_args()
 
 if (args.export):
@@ -99,31 +104,37 @@ print "Loading store products..."
 
 existing_products = load_products()
 
-variant_by_sku = dict([(variant['sku'], variant)
-	for product in existing_products
-	for variant in product['variants']])
+variants_by_sku = defaultdict(list)
+
+for product in existing_products:
+	for variant in product['variants']:
+		if variant['sku']:
+			variants_by_sku[variant['sku']].append(variant)
+
 
 to_update = []
 to_create = []
 
 for product in csv_products:
-	if product.sku in variant_by_sku:
-		variant = variant_by_sku[product.sku]
-		if variant['stock'] != product.stock or variant['price'] != product.price: 
-			variant['price'] = product.price
-			variant['stock'] = product.stock
-			to_update.append(variant)
+	if product.sku in variants_by_sku:
+		variants = variants_by_sku[product.sku]
+		for variant in variants:
+			if variant['stock'] != product.stock or variant['price'] != product.price: 
+				variant['price'] = product.price
+				variant['stock'] = product.stock
+				to_update.append(variant)
 	else:
 		to_create.append(product)
 
 
 for variant in to_update:
 	print "Updating " + variant['sku'] + " price: " + variant['price'] + " stock: " + str(variant['stock'])
-	api_request("/products/" + str(variant['product_id']) + '/variants/' + str(variant['id']), verb="PUT", data=variant)
+	if not args.dry:
+		api_request("/products/" + str(variant['product_id']) + '/variants/' + str(variant['id']), verb="PUT", data=variant)
 
 for product in to_create:
 	print "New product " + product.sku + " - " + (product.name or "")
-	if args.create:
+	if args.create and not args.dry:
 		api_request("/products/", verb="POST", data={
 			"name": product.name,
 			"variants": [{
